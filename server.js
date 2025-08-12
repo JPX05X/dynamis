@@ -9,6 +9,8 @@ import morgan from 'morgan';
 dotenv.config();
 
 const app = express();
+const path = require('path');
+const fs = require('fs');
 const PORT = process.env.PORT || 3001;
 
 // Environment variables
@@ -19,10 +21,25 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://dynamis-ib7ekj5cu-jpxxxs-projects.vercel.app',
+  'https://dynamis.vercel.app'
+];
+
 app.use(cors({
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: function(origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 // Parse incoming requests
@@ -44,11 +61,34 @@ app.use((req, res, next) => {
 });
 
 // Serve static files from the root directory
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, {
+  extensions: ['html', 'htm'],
+  index: 'home.html' // Serve home.html as the default file
+}));
 
-// Root route
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/home.html');
+// Handle root and other static file routes
+// Handle root and other static file routes
+app.get(['/', '/:page'], (req, res, next) => {
+  const page = req.params.page || 'home';
+  const filePath = path.join(__dirname, `${page}.html`);
+  
+  // If there's a matching HTML file, serve it
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  
+  // If no matching file, serve the home page
+  if (page === 'home') {
+    return res.sendFile(path.join(__dirname, 'home.html'));
+  }
+  
+  // Otherwise, continue to next middleware
+  next();
+});
+
+// API routes
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 // Health check endpoint
