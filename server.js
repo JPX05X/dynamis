@@ -1,16 +1,22 @@
+// Load environment variables first
 import dotenv from 'dotenv';
+dotenv.config({ path: process.env.ENV_PATH || '.env' });
+
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-dotenv.config();
+// ES Modules compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
-const path = require('path');
-const fs = require('fs');
 const PORT = process.env.PORT || 3001;
 
 // Environment variables
@@ -20,26 +26,31 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://dynamis-ib7ekj5cu-jpxxxs-projects.vercel.app',
-  'https://dynamis.vercel.app'
-];
+// CORS configuration - more permissive in development
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = isProduction 
+  ? [
+      'https://dynamis-production.up.railway.app',
+      'https://dynamis.vercel.app',
+      'https://dynamis-llp.vercel.app'
+    ]
+  : ['http://localhost:3000', 'http://localhost:3001'];
 
 app.use(cors({
-  origin: function(origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
+  origin: isProduction 
+    ? (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.warn(`Blocked request from origin: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    : '*',
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
 // Parse incoming requests
@@ -61,29 +72,48 @@ app.use((req, res, next) => {
 });
 
 // Serve static files from the root directory
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname, {
   extensions: ['html', 'htm'],
-  index: 'home.html' // Serve home.html as the default file
+  index: 'home.html',
+  setHeaders: (res, path) => {
+    // Set proper caching headers
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+    }
+  }
 }));
 
 // Handle root and other static file routes
 // Handle root and other static file routes
 app.get(['/', '/:page'], (req, res, next) => {
-  const page = req.params.page || 'home';
-  const filePath = path.join(__dirname, `${page}.html`);
-  
-  // If there's a matching HTML file, serve it
-  if (fs.existsSync(filePath)) {
-    return res.sendFile(filePath);
+  try {
+    const page = req.params.page || 'home';
+    const filePath = path.join(__dirname, `${page}.html`);
+    
+    // If there's a matching HTML file, serve it
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+    
+    // If no matching file, serve the home page
+    if (page === 'home') {
+      return res.sendFile(path.join(__dirname, 'home.html'));
+    }
+    
+    // Try with .html extension if not already tried
+    if (!page.endsWith('.html') && fs.existsSync(`${filePath}.html`)) {
+      return res.sendFile(`${filePath}.html`);
+    }
+    
+    // Otherwise, continue to next middleware
+    next();
+  } catch (error) {
+    console.error('Error serving static file:', error);
+    next(error);
   }
-  
-  // If no matching file, serve the home page
-  if (page === 'home') {
-    return res.sendFile(path.join(__dirname, 'home.html'));
-  }
-  
-  // Otherwise, continue to next middleware
-  next();
 });
 
 // API routes
@@ -175,14 +205,33 @@ ${message}
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ 
-    success: false, 
-    message: 'Internal server error' 
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Form submission endpoint: http://localhost:${PORT}/api/messages`);
-  console.log('Press Ctrl+C to stop the server');
+// Handle 404
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, '404.html'));
 });
+
+// Start the server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`Server listening on port ${PORT}`);
+  console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+export default app;
