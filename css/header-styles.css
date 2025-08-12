@@ -1,0 +1,58 @@
+/* header-styles.css */
+/* Custom CSS to replace logo with text */
+.header-title-logo {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.header-title-logo img {
+  opacity: 0;
+  visibility: hidden;
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.header-title-logo a {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 10px;
+  text-decoration: none;
+}
+.header-title-logo a:before {
+  content: '\f7d8';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: 0.9em;
+  display: inline-block;
+  color: #0055AA;
+  line-height: 1;
+}
+.header-title-logo a:after {
+  content: 'The Great Recovery';
+  display: block;
+  font-family: 'degular-display', sans-serif;
+  font-weight: 700;
+  font-size: 45px;
+  color: #0055AA;
+  white-space: nowrap;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .header-title-logo a:after {
+    font-size: 40px;
+  }
+}
+
+@media (max-width: 767px) {
+  .header-title-logo a:after {
+    font-size: 36px;
+  }
+}
