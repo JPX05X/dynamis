@@ -5,7 +5,7 @@ dotenv.config();
 const config = {
   // Server
   NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: process.env.PORT || 8080,
+  PORT: process.env.PORT || 3001,
   
   // Telegram
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',

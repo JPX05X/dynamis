@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     buttonLoader: document.querySelector('#submitBtn .button-loader')
   };
 
-  // API endpoint configuration
+  // API endpoint configuration - using relative URL to work in both dev and production
   const API_ENDPOINT = '/api/messages';
   
   // Form submission handler
@@ -87,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setLoadingState(false);
     }
   });
-  const API_ENDPOINT = 'http://localhost:3000/api/messages';
 
   // Initialize form
   function initForm() {

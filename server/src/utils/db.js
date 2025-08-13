@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
-const config = require('../../config/config');
-const logger = require('./logger');
+import mongoose from 'mongoose';
+import config from '../../config/config.js';
+import logger from './logger.js';
 
 // Set mongoose options
 mongoose.set('strictQuery', false);
@@ -190,10 +190,11 @@ process.on('SIGTERM', () => {
 });
 
 // Export the connection and utility functions
-module.exports = {
-  connect: connectDB,
-  connection: mongoose.connection,
+export {
+  connectDB as connect,
+  mongoose,
   checkHealth,
-  getStats,
-  mongoose
+  getStats
 };
+
+export const connection = mongoose.connection;

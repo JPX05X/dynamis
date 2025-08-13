@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 import config from './config.js';
 import logger from './utils/logger.js';
 import formController from './controllers/form.controller.js';
+import { connectDB, checkHealth } from './utils/db.js';
 
 // Initialize Express app
 const app = express();
@@ -101,7 +102,7 @@ app.use(express.static(path.join(__dirname, '../..')));
 
 // Serve home.html at the root path
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../home.html'));
+  res.sendFile(path.join(__dirname, '../../index.html'));
 });
 
 // 404 handler
@@ -129,12 +130,42 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-const server = app.listen(config.PORT, () => {
-  logger.info(`Server running in ${config.NODE_ENV} mode on port ${config.PORT}`);
-  logger.info(`Form submission endpoint: http://localhost:${config.PORT}/api/messages`);
-  logger.info(`Health check: http://localhost:${config.PORT}/health`);
+// Health check endpoint that verifies database connection
+app.get('/health', async (req, res) => {
+  const dbHealth = await checkHealth();
+  const status = dbHealth.status === 'up' ? 200 : 503;
+  
+  return res.status(status).json({
+    status: dbHealth.status,
+    message: dbHealth.message,
+    timestamp: new Date().toISOString(),
+    environment: config.NODE_ENV,
+    ...(config.NODE_ENV === 'development' && { details: dbHealth.stats })
+  });
 });
+
+// Start server with database connection
+const startServer = async () => {
+  try {
+    // Connect to database
+    await connectDB();
+    
+    // Start listening
+    const server = app.listen(config.PORT, () => {
+      logger.info(`Server running in ${config.NODE_ENV} mode on port ${config.PORT}`);
+      logger.info(`Form submission endpoint: http://localhost:${config.PORT}/api/messages`);
+      logger.info(`Health check: http://localhost:${config.PORT}/health`);
+    });
+    
+    return server;
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+const server = await startServer();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     message: formData.get('message')
                 };
                 
-                const response = await fetch('http://localhost:3001/api/messages', {
+                const response = await fetch('/api/messages', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

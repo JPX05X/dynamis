@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: process.env.ENV_PATH || '.env' });
 
 import express from 'express';
+import mongoose from 'mongoose';
 import cors from 'cors';
 import axios from 'axios';
 import rateLimit from 'express-rate-limit';
@@ -11,15 +12,16 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
 
 // ES Modules compatible __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
 
 // Environment variables
+const PORT = process.env.PORT || 3001; // Default to 3001 if PORT is not set in env
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
@@ -34,7 +36,12 @@ const allowedOrigins = isProduction
       'https://dynamis.vercel.app',
       'https://dynamis-llp.vercel.app'
     ]
-  : ['http://localhost:3000', 'http://localhost:3001'];
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:8080',
+      'http://127.0.0.1:8080'
+    ];
 
 app.use(cors({
   origin: isProduction 
@@ -74,46 +81,150 @@ app.use((req, res, next) => {
 // Serve static files from the root directory
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname, {
-  extensions: ['html', 'htm'],
-  index: 'home.html',
+  // Serve static files with proper caching headers and SPA support
   setHeaders: (res, path) => {
     // Set proper caching headers
     if (path.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     } else {
-      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      // Cache static assets for 1 year
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
-  }
+  },
+  // Enable dotfiles to be served (like .htaccess, .env, etc.)
+  dotfiles: 'ignore',
+  // Enable case-sensitive routing
+  caseSensitive: true,
+  // Enable strict routing
+  strict: false,
+  // Serve index.html for directories
+  index: ['index.html', 'index.htm'],
+  // Set max age for cache control
+  maxAge: '1y',
+  // Handle errors
+  fallthrough: true
 }));
 
-// Handle root and other static file routes
-// Handle root and other static file routes
-app.get(['/', '/:page'], (req, res, next) => {
+// Store the mongoose connection instance
+let dbConnection = null;
+
+// Update the connection instance when connecting
+async function updateDbConnection(connection) {
+  dbConnection = connection;
+  return connection;
+}
+
+// Database connection test endpoint
+app.get('/api/db-health', async (req, res) => {
   try {
-    const page = req.params.page || 'home';
-    const filePath = path.join(__dirname, `${page}.html`);
+    // If we don't have a connection instance yet, try to get one
+    if (!dbConnection) {
+      const { connect } = await import('./server/src/utils/db.js');
+      try {
+        dbConnection = await connect();
+      } catch (err) {
+        console.error('Failed to establish database connection:', err);
+        return res.status(503).json({
+          status: 'error',
+          message: 'Database connection not established',
+          connectionState: 0
+        });
+      }
+    }
+
+    // Check connection state
+    const isConnected = dbConnection.readyState === 1;
     
-    // If there's a matching HTML file, serve it
-    if (fs.existsSync(filePath)) {
-      return res.sendFile(filePath);
+    if (!isConnected) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Database not connected',
+        connectionState: dbConnection.readyState
+      });
     }
     
-    // If no matching file, serve the home page
-    if (page === 'home') {
-      return res.sendFile(path.join(__dirname, 'home.html'));
+    // Try to get database stats
+    try {
+      const db = dbConnection.db;
+      if (!db) {
+        throw new Error('Database instance not available');
+      }
+      
+      const stats = await db.stats();
+      
+      res.json({
+        status: 'ok',
+        message: 'Database connection is healthy',
+        details: {
+          db: db.databaseName,
+          host: dbConnection.host,
+          collections: stats.collections || 0,
+          dataSize: stats.dataSize,
+          storageSize: stats.storageSize,
+          connectionState: dbConnection.readyState,
+          connectionStatus: 'connected'
+        }
+      });
+    } catch (dbError) {
+      console.error('Database stats error:', dbError);
+      res.status(200).json({
+        status: 'warning',
+        message: 'Connected to MongoDB but could not fetch stats',
+        connectionState: dbConnection.readyState,
+        error: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+      });
     }
-    
-    // Try with .html extension if not already tried
-    if (!page.endsWith('.html') && fs.existsSync(`${filePath}.html`)) {
-      return res.sendFile(`${filePath}.html`);
-    }
-    
-    // Otherwise, continue to next middleware
-    next();
   } catch (error) {
-    console.error('Error serving static file:', error);
-    next(error);
+    console.error('Database health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Database connection failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      connectionState: mongoose.connection?.readyState || 'unknown'
+    });
   }
+});
+
+// API health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    dbStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// SPA Fallback - Serve index.html for all other GET requests
+app.get('*', (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // Skip file extensions (let static middleware handle these)
+  if (path.extname(req.path).length > 0) {
+    return next();
+  }
+  
+  // Default to serving index.html for SPA routing
+  res.sendFile(path.join(__dirname, 'index.html'), (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      next(err);
+    }
+  });
 });
 
 // API routes
@@ -210,21 +321,145 @@ app.use((err, req, res, next) => {
 
 // Handle 404
 app.use((req, res) => {
-  res.status(404).sendFile(path.join(__dirname, '404.html'));
+  console.log(`404 - ${req.method} ${req.originalUrl}`);
+  
+  // If it's an API request, return JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'Not Found',
+      path: req.path
+    });
+  }
+  
+  // Otherwise, send a simple text response
+  res.status(404).send('Not Found');
 });
 
-// Start the server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
-  console.log(`Server listening on port ${PORT}`);
-  console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method
+  });
+
+  // Set status code
+  const statusCode = err.statusCode || 500;
+  
+  // Prepare error response
+  const errorResponse = {
+    status: 'error',
+    message: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  };
+
+  // Send response
+  res.status(statusCode);
+  
+  // If it's an API request, return JSON
+  if (req.path.startsWith('/api/')) {
+    res.json(errorResponse);
+  } else {
+    // Otherwise, send a simple error page
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Error ${statusCode}</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+            h1 { color: #e74c3c; }
+            pre { text-align: left; max-width: 800px; margin: 20px auto; padding: 20px; background: #f5f5f5; border-radius: 5px; }
+          </style>
+        </head>
+        <body>
+          <h1>Error ${statusCode}</h1>
+          <p>${errorResponse.message}</p>
+          ${process.env.NODE_ENV === 'development' ? `<pre>${err.stack}</pre>` : ''}
+        </body>
+      </html>
+    `);
+  }
 });
+
+// Initialize database connection
+async function startServer() {
+  try {
+    // Import mongoose and connect function
+    const { connect } = await import('./server/src/utils/db.js');
+    
+    console.log('🔌 Connecting to database...');
+    try {
+      // Connect to database and store the connection
+      const connection = await connect();
+      dbConnection = connection; // Store the connection instance
+      console.log('✅ Database connection established');
+      
+      // Wait for the connection to be ready
+      console.log('🔄 Verifying database connection...');
+      await new Promise((resolve, reject) => {
+        // If already connected, resolve immediately
+        if (connection.readyState === 1) {
+          console.log('✅ Database connection verified');
+          return resolve();
+        }
+        
+        // Otherwise, wait for the 'connected' event
+        const onConnected = () => {
+          console.log('✅ Database connection verified via event');
+          connection.removeListener('error', onError);
+          resolve();
+        };
+        
+        const onError = (err) => {
+          connection.removeListener('connected', onConnected);
+          reject(err);
+        };
+        
+        connection.once('connected', onConnected);
+        connection.once('error', onError);
+        
+        // Set a timeout
+        setTimeout(() => {
+          connection.removeListener('connected', onConnected);
+          connection.removeListener('error', onError);
+          reject(new Error('Database connection verification timeout'));
+        }, 5000);
+      });
+    } catch (error) {
+      console.error('❌ Database connection failed:', error.message);
+      throw error;
+    }
+    
+    // Start server after database connection is established
+    console.log('🚀 Starting server...');
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
+      console.log(`Server listening on port ${PORT}`);
+      console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+      console.log(`Server running at http://localhost:${PORT}`);
+      console.log('Database connection status:', mongoose.connection.readyState === 1 ? 'connected' : 'disconnected');
+    });
+    
+    return server;
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-  // Close server & exit process
-  server.close(() => process.exit(1));
+  console.error('UNHANDLED REJECTION! Shutting down...');
+  console.error(err.name, err.message);
+  server.close(() => {
+    process.exit(1);
+  });
 });
 
 // Handle uncaught exceptions

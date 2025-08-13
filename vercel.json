@@ -28,6 +28,10 @@
     {
       "src": "_includes/*",
       "use": "@vercel/static"
+    },
+    {
+      "src": "practiceArea/*.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -36,8 +40,17 @@
       "dest": "/server.js"
     },
     {
-      "src": "/(.*)",
+      "src": "/(.*\\.(?:css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot))",
       "dest": "/$1"
+    },
+    {
+      "src": "/(contact|careers|media|legal|talents|knowledge|practice|results|practiceArea/.*)\\.html",
+      "dest": "/$1.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "status": 200
     }
   ]
 }
