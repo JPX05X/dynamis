@@ -18,6 +18,9 @@ npm-debug.log*
 *.suo
 *.ntvs*
 *.njsproj
+
+# Backup files
+*.bak
 *.sln
 *.sw?
 
