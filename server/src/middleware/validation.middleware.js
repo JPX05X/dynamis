@@ -114,11 +114,60 @@ const messageValidation = {
       .isEmpty()
       .withMessage('Form submission rejected'),
       
-    commonRules.name,
+    // Accept either full `name` or both `firstName` and `lastName`
+    body('name')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Name must be between 2 and 100 characters'),
+    body('firstName')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('First name must be between 2 and 50 characters'),
+    body('lastName')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('Last name must be between 2 and 50 characters'),
     commonRules.email,
     commonRules.phone,
     commonRules.subject,
-    commonRules.message,
+
+    // Accept either `message` or `content` with the same length constraints
+    body('message')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 10, max: 5000 })
+      .withMessage('Message must be between 10 and 5000 characters'),
+    body('content')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 10, max: 5000 })
+      .withMessage('Content must be between 10 and 5000 characters'),
+
+    // Require at least one of message or content
+    body()
+      .custom((_, { req }) => {
+        const msg = (req.body.message || '').trim();
+        const cnt = (req.body.content || '').trim();
+        if (!msg && !cnt) {
+          throw new Error('Either message or content is required');
+        }
+        return true;
+      }),
+
+    // Require either full name or both first and last names
+    body()
+      .custom((_, { req }) => {
+        const hasFullName = !!(req.body.name && String(req.body.name).trim().length >= 2);
+        const hasFirst = !!(req.body.firstName && String(req.body.firstName).trim().length >= 2);
+        const hasLast = !!(req.body.lastName && String(req.body.lastName).trim().length >= 2);
+        if (!(hasFullName || (hasFirst && hasLast))) {
+          throw new Error('Provide either name or both firstName and lastName');
+        }
+        return true;
+      }),
   ]),
   
   updateStatus: validate([

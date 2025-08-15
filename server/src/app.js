@@ -95,8 +95,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Routes
-app.use('/api/messages', messageRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

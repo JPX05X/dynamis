@@ -15,13 +15,50 @@ class MessageController {
       const userAgent = req.get('user-agent') || '';
       const referrer = req.get('referer') || '';
 
-      const { firstName, lastName, email, subject, message } = req.body;
+      // Flexible input mapping
+      const {
+        name,
+        firstName: rawFirstName,
+        lastName: rawLastName,
+        email,
+        subject: rawSubject,
+        message,
+        content,
+        phone,
+      } = req.body || {};
+
+      // Split `name` into first/last if provided; otherwise use provided parts
+      let firstName = rawFirstName;
+      let lastName = rawLastName;
+      if (name && (!firstName || !lastName)) {
+        const parts = String(name).trim().split(/\s+/);
+        firstName = firstName || parts.shift() || '';
+        lastName = lastName || parts.join(' ') || '';
+      }
+
+      // Prefer explicit `content`, else fallback to `message`
+      const normalizedContent = (typeof content === 'string' && content.trim().length)
+        ? content
+        : (typeof message === 'string' ? message : '');
+
+      // Default subject if not provided
+      const subject = (rawSubject && String(rawSubject).trim().length) ? rawSubject : 'New Message';
+
+      // Guard: ensure content is present
+      if (!normalizedContent || normalizedContent.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Message content is required',
+        });
+      }
+
       const messageData = {
         firstName,
         lastName,
         email,
+        phone,
         subject,
-        message,
+        content: normalizedContent,
         ipAddress,
         userAgent,
         referrer,

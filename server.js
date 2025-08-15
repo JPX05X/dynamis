@@ -121,7 +121,7 @@ app.get('/api/db-health', async (req, res) => {
   try {
     // If we don't have a connection instance yet, try to get one
     if (!dbConnection) {
-      const { connect } = await import('./server/src/utils/db.js');
+      const { connect, mongoose: dbMongoose } = await import('./server/src/utils/db.js');
       try {
         dbConnection = await connect();
       } catch (err) {
@@ -388,46 +388,48 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     // Import mongoose and connect function
-    const { connect } = await import('./server/src/utils/db.js');
+    const { connect, mongoose: dbMongoose } = await import('./server/src/utils/db.js');
     
     console.log('🔌 Connecting to database...');
     try {
-      // Connect to database and store the connection
-      const connection = await connect();
-      dbConnection = connection; // Store the connection instance
-      console.log('✅ Database connection established');
-      
-      // Wait for the connection to be ready
-      console.log('🔄 Verifying database connection...');
-      await new Promise((resolve, reject) => {
-        // If already connected, resolve immediately
-        if (connection.readyState === 1) {
-          console.log('✅ Database connection verified');
-          return resolve();
-        }
-        
-        // Otherwise, wait for the 'connected' event
-        const onConnected = () => {
-          console.log('✅ Database connection verified via event');
-          connection.removeListener('error', onError);
-          resolve();
-        };
-        
-        const onError = (err) => {
-          connection.removeListener('connected', onConnected);
-          reject(err);
-        };
-        
-        connection.once('connected', onConnected);
-        connection.once('error', onError);
-        
-        // Set a timeout
-        setTimeout(() => {
-          connection.removeListener('connected', onConnected);
-          connection.removeListener('error', onError);
-          reject(new Error('Database connection verification timeout'));
-        }, 5000);
-      });
+      // Connect to database and store the connection (if available)
+      let connection;
+      try {
+        connection = await connect();
+      } catch (err) {
+        console.warn('⚠️ Database connect() failed, continuing without DB for now:', err.message);
+      }
+      // Fallback to mongoose connection instance even if undefined from connect()
+      dbConnection = connection || dbMongoose.connection;
+      if (dbConnection && typeof dbConnection.readyState !== 'undefined') {
+        console.log('✅ Database connection object acquired (state:', dbConnection.readyState, ')');
+        // Best-effort verification without throwing
+        try {
+          if (dbConnection.readyState !== 1) {
+            console.log('🔄 Waiting briefly for database connection...');
+            await new Promise((resolve) => {
+              const onConnected = () => {
+                dbConnection.removeListener('error', onError);
+                console.log('✅ Database connected');
+                resolve();
+              };
+              const onError = () => {
+                dbConnection.removeListener('connected', onConnected);
+                resolve(); // do not block startup
+              };
+              dbConnection.once('connected', onConnected);
+              dbConnection.once('error', onError);
+              setTimeout(() => {
+                dbConnection.removeListener('connected', onConnected);
+                dbConnection.removeListener('error', onError);
+                resolve();
+              }, 2000);
+            });
+          }
+        } catch {}
+      } else {
+        console.log('⚠️ No database connection object available; proceeding without DB.');
+      }
     } catch (error) {
       console.error('❌ Database connection failed:', error.message);
       throw error;
