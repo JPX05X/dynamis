@@ -260,20 +260,22 @@ app.post('/api/messages', async (req, res) => {
       });
     }
 
-    // Format message for Telegram
-    const telegramMessage = `
-📧 *New Contact Form Submission* 📧
-
-*Name:* ${name}
-*Email:* ${email}
-${phone ? `*Phone:* ${phone}\n` : ''}*Subject:* ${subject || 'No Subject'}
-
-*Message:*
-${message}
-
-*Time:* ${new Date().toLocaleString()}
-*IP:* ${req.ip}
-`;
+    // Format message for Telegram (plain text, no Markdown)
+    const safe = (v) => String(v || '').replace(/\r\n|\r|\n/g, '\n');
+    const telegramMessage = [
+      'New Contact Form Submission',
+      '',
+      `Name: ${safe(name)}`,
+      `Email: ${safe(email)}`,
+      phone ? `Phone: ${safe(phone)}` : null,
+      `Subject: ${safe(subject || 'No Subject')}`,
+      '',
+      'Message:',
+      safe(message),
+      '',
+      `Time: ${new Date().toLocaleString()}`,
+      `IP: ${req.ip}`
+    ].filter(Boolean).join('\n');
 
     // Enforce Telegram delivery based on environment
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -293,9 +295,9 @@ ${message}
         {
           chat_id: TELEGRAM_CHAT_ID,
           text: telegramMessage,
-          parse_mode: 'Markdown',
           disable_web_page_preview: true
-        }
+        },
+        { timeout: 10000 }
       );
       console.log('Message sent to Telegram:', telegramResponse.data);
     } catch (tgErr) {
