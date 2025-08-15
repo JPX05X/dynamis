@@ -30,18 +30,7 @@
   line-height: 1;
 }
 .header-title-logo a:after {
-  content: 'The Great Recovery';
-  display: block;
-  font-family: 'degular-display', sans-serif;
-  font-weight: 700;
-  font-size: 45px;
-  color: #0055AA;
-  white-space: nowrap;
-  line-height: 1;
-  position: relative;
-  z-index: 1;
-  margin: 0;
-  padding: 0;
+  display: none; /* Disable the pseudo-element text */
 }
 
 /* Responsive adjustments */
