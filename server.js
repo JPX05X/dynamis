@@ -42,16 +42,18 @@ const allowedOrigins = isProduction
       'http://localhost:8080',
       'http://127.0.0.1:8080'
     ];
+// Allow any project preview/production URLs on Vercel (e.g., dynamis-xxxxx.vercel.app, dynamis-eight.vercel.app)
+const vercelOriginRegex = /^https?:\/\/[a-z0-9-]+\.vercel\.app$/i;
 
 app.use(cors({
   origin: isProduction 
     ? (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          console.warn(`Blocked request from origin: ${origin}`);
-          callback(new Error('Not allowed by CORS'));
-        }
+        // Allow same-origin or server-to-server (no Origin header)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        if (vercelOriginRegex.test(origin)) return callback(null, true);
+        console.warn(`Blocked request from origin: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
       }
     : '*',
   methods: ['GET', 'POST', 'OPTIONS'],
