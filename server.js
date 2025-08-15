@@ -452,23 +452,36 @@ async function startServer() {
   }
 }
 
-// Start the server
-startServer();
+// Start the server locally (not on Vercel)
+let serverRef;
+if (!process.env.VERCEL) {
+  startServer().then(s => { serverRef = s; }).catch(() => {});
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION! Shutting down...');
   console.error(err.name, err.message);
-  server.close(() => {
+  if (serverRef && serverRef.close) {
+    serverRef.close(() => {
+      process.exit(1);
+    });
+  } else {
     process.exit(1);
-  });
+  }
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  // Close server & exit process
-  server.close(() => process.exit(1));
+  if (serverRef && serverRef.close) {
+    serverRef.close(() => process.exit(1));
+  } else {
+    process.exit(1);
+  }
 });
 
-export default app;
+// Export a Vercel-compatible handler
+export default function handler(req, res) {
+  return app(req, res);
+}
