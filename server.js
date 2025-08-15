@@ -275,23 +275,40 @@ ${message}
 *IP:* ${req.ip}
 `;
 
-    // Send to Telegram
-    const telegramResponse = await axios.post(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        chat_id: TELEGRAM_CHAT_ID,
-        text: telegramMessage,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true
+    // Enforce Telegram delivery based on environment
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+      const msg = 'Telegram not configured: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing';
+      if (isProduction) {
+        console.error(msg);
+        return res.status(500).json({ success: false, message: 'Message delivery failed' });
+      } else {
+        console.warn(msg + ' (development mode, accepting message without Telegram).');
+        return res.status(200).json({ success: true, message: 'Message received (dev, no Telegram)' });
       }
-    );
+    }
 
-    console.log('Message sent to Telegram:', telegramResponse.data);
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Message sent successfully' 
-    });
+    try {
+      const telegramResponse = await axios.post(
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        {
+          chat_id: TELEGRAM_CHAT_ID,
+          text: telegramMessage,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        }
+      );
+      console.log('Message sent to Telegram:', telegramResponse.data);
+    } catch (tgErr) {
+      const errMsg = tgErr.response?.data || tgErr.message;
+      if (isProduction) {
+        console.error('Telegram send failed (production):', errMsg);
+        return res.status(500).json({ success: false, message: 'Message delivery failed' });
+      } else {
+        console.error('Telegram send failed (development, non-fatal):', errMsg);
+      }
+    }
+
+    return res.status(200).json({ success: true, message: 'Message sent successfully' });
 
   } catch (error) {
     console.error('Error processing form submission:', error);
