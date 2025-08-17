@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: process.env.ENV_PATH || '.env' });
 
 import express from 'express';
+import messageRoutes from './server/src/routes/message.routes.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import axios from 'axios';
@@ -188,6 +189,9 @@ app.get('/api/db-health', async (req, res) => {
     });
   }
 });
+
+// Message routes
+app.use('/api/messages', messageRoutes);
 
 // API health check
 app.get('/api/health', (req, res) => {

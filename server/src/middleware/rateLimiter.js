@@ -76,8 +76,20 @@ const createRateLimiter = (points, duration) => {
 };
 
 // Specific endpoint rate limiters
-const messageLimiter = createRateLimiter(5, 60); // 5 requests per minute
-const loginLimiter = createRateLimiter(3, 60 * 60); // 3 requests per hour
+const messageLimiter = createRateLimiter(5, 60); // 5 requests per minute per IP
+const loginLimiter = createRateLimiter(3, 60 * 60); // 3 requests per hour per IP
+const contactFormLimiter = createRateLimiter(3, 60 * 60 * 4); // 3 requests per 4 hours per IP
+
+// Custom rate limiter for contact form submissions
+const contactFormRateLimit = (req, res, next) => {
+  // Skip rate limiting for non-POST requests to /api/messages
+  if (req.method !== 'POST' || !req.path.includes('/messages')) {
+    return next();
+  }
+  
+  // Apply stricter rate limiting for contact form submissions
+  return contactFormLimiter(req, res, next);
+};
 
 // Middleware to apply specific rate limiting
 const specificRateLimiter = (limiter) => {
@@ -141,6 +153,7 @@ const specificRateLimiter = (limiter) => {
 module.exports = {
   apiLimiter,
   authLimiter,
+  contactFormRateLimit,
   messageLimiter: specificRateLimiter(messageLimiter),
   loginLimiter: specificRateLimiter(loginLimiter),
 };

@@ -198,6 +198,26 @@
     </main>
 
     <!-- Footer -->
+    <style>
+        .footer-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+        
+        .footer-section {
+            flex: 1;
+            min-width: 200px;
+            margin-bottom: 1.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .footer-section {
+                flex: 0 0 100%;
+            }
+        }
+    </style>
     <footer class="site-footer">
         <div class="container">
             <div class="footer-content">
@@ -208,18 +228,20 @@
                 <div class="footer-section">
                     <h4>Quick Links</h4>
                     <ul>
-                        <li><a href="/">Home</a></li>
-                        <li><a href="/practice">Practice Areas</a></li>
-                        <li><a href="/knowledge">Knowledge</a></li>
-                        <li><a href="/careers">Careers</a></li>
-                        <li><a href="/contact">Contact</a></li>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="practice.html">Practice Areas</a></li>
+                        <li><a href="knowledge.html">Knowledge</a></li>
+                        <li><a href="careers.html">Careers</a></li>
+                        <li><a href="contact.htmlcontact.html
                     </ul>
                 </div>
                 <div class="footer-section">
                     <h4>Contact Us</h4>
-                    <p>Email: info@thegreatrecovery.com</p>
-                    <p>Phone: (123) 456-7890</p>
-                    <div class="social-links">
+                    <p>Email: <a href="mailto:info@thegreatrecovery.it.com">info@thegreatrecovery.it.com</a></p>
+        <p>Phone: <a href="tel:+13604214139">+1 360-421-4139</a></p>
+        <p>Phone: <a href="tel:+13372594088">+1 (337) 259-4088</a></p>
+        <p>Phone: <a href="tel:+17702829550">+1 (770) 282-9550</a></p>
+<div class="social-links">
                         <a href="#"><i class="fab fa-linkedin"></i></a>
                         <a href="#"><i class="fab fa-twitter"></i></a>
                         <a href="#"><i class="fab fa-facebook"></i></a>

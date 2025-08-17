@@ -2,10 +2,14 @@ const express = require('express');
 const router = express.Router();
 const messageController = require('../controllers/message.controller');
 const { validate, validateObjectId, messageValidation } = require('../middleware/validation.middleware');
+const { contactFormRateLimit } = require('../middleware/rateLimiter');
+const duplicateCheck = require('../middleware/duplicateCheck.middleware');
 
 // Public routes (no authentication required)
 router.post(
   '/',
+  contactFormRateLimit, // Apply rate limiting
+  duplicateCheck,       // Check for duplicate submissions
   messageValidation.createMessage,
   messageController.createMessage
 );

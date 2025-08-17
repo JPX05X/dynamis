@@ -8,12 +8,58 @@ class MessageController {
    * @param {Object} res - Express response object
    * @param {Function} next - Express next function
    */
+  // Validate email format
+  static #isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  // Validate phone number (basic international format)
+  static #isValidPhone(phone) {
+    if (!phone) return true;
+    const phoneRegex = /^[+]?[\s\d-]{6,20}$/;
+    return phoneRegex.test(phone);
+  }
+
+  // Validate input data
+  static #validateInput(data) {
+    const errors = [];
+    const { email, phone, message, content } = data;
+
+    if (!email || !MessageController.#isValidEmail(email)) {
+      errors.push('Please provide a valid email address');
+    }
+
+    if (phone && !MessageController.#isValidPhone(phone)) {
+      errors.push('Please provide a valid phone number');
+    }
+
+    const messageContent = content || message || '';
+    if (messageContent.trim().length < 10) {
+      errors.push('Message must be at least 10 characters long');
+    }
+
+    return errors;
+  }
+
   async createMessage(req, res, next) {
     try {
       // Extract IP and user agent from request
       const ipAddress = req.ip || req.connection.remoteAddress;
       const userAgent = req.get('user-agent') || '';
       const referrer = req.get('referer') || '';
+
+      // Check for honeypot field (spam prevention)
+      if (req.body.website) {
+        logger.info('Potential bot submission detected (honeypot triggered)', {
+          ip: ipAddress,
+          userAgent
+        });
+        return res.status(200).json({
+          success: true,
+          message: 'Message received successfully'
+        });
+      }
 
       // Flexible input mapping
       const {
@@ -44,11 +90,19 @@ class MessageController {
       // Default subject if not provided
       const subject = (rawSubject && String(rawSubject).trim().length) ? rawSubject : 'New Message';
 
-      // Guard: ensure content is present
-      if (!normalizedContent || normalizedContent.trim().length === 0) {
+      // Validate input data
+      const validationErrors = MessageController.#validateInput({
+        email,
+        phone,
+        message: normalizedContent,
+        content: normalizedContent
+      });
+
+      if (validationErrors.length > 0) {
         return res.status(400).json({
           success: false,
-          message: 'Message content is required',
+          message: 'Validation failed',
+          errors: validationErrors
         });
       }
 

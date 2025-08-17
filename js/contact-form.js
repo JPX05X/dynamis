@@ -19,41 +19,41 @@
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
       
-      try {
         // Show loading state
-        const submitButton = form.querySelector('button[type="submit"]');
-        const originalButtonText = submitButton.textContent;
-        submitButton.disabled = true;
-        submitButton.textContent = 'Sending...';
+      const submitButton = form.querySelector('button[type="submit"]');
+      const originalButtonText = submitButton.textContent;
+      submitButton.disabled = true;
+      submitButton.textContent = 'Sending...';
       
       try {
         // Get form data
-        let formData = new FormData(form);
-        let submitData = {
+        const formData = new FormData(form);
+        const data = {
           firstName: formData.get('firstName'),
           lastName: formData.get('lastName'),
           email: formData.get('email'),
-          subject: formData.get('subject'),
-          message: formData.get('message')
+          subject: formData.get('subject') || 'New Contact Form Submission',
+          message: formData.get('message'),
+          phone: formData.get('phone') || '',
+          website: formData.get('website') || '' // Honeypot field
         };
-      
-      // Get form data
-      const formData = new FormData(form);
-      const data = {};
-      formData.forEach((value, key) => {
-        data[key] = value;
-      });
-      
-      try {
+        
         const response = await fetch('/api/messages', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
           },
           body: JSON.stringify(data)
         });
         
         const result = await response.json();
+        
+        // Remove any existing status messages
+        const existingStatus = form.parentNode.querySelector('.form-status');
+        if (existingStatus) {
+          existingStatus.remove();
+        }
         
         if (response.ok) {
           // Show success message
@@ -63,10 +63,18 @@
           form.parentNode.insertBefore(successDiv, form.nextSibling);
           form.reset();
         } else {
-          // Show error message
+          // Show error message with details from server if available
           const errorDiv = document.createElement('div');
           errorDiv.className = 'form-status error';
-          errorDiv.textContent = result.message || 'Failed to send message. Please try again.';
+          
+          if (result.errors && Array.isArray(result.errors)) {
+            errorDiv.innerHTML = result.errors.map(err => 
+              `<div>${err}</div>`
+            ).join('');
+          } else {
+            errorDiv.textContent = result.message || 'Failed to send message. Please try again.';
+          }
+          
           form.parentNode.insertBefore(errorDiv, form.nextSibling);
         }
       } catch (error) {
@@ -75,6 +83,12 @@
         errorDiv.className = 'form-status error';
         errorDiv.textContent = 'An error occurred. Please try again later.';
         form.parentNode.insertBefore(errorDiv, form.nextSibling);
+      } finally {
+        // Always re-enable the submit button
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalButtonText;
+        }
       }
     });
   });

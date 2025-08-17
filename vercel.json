@@ -52,5 +52,10 @@
       "dest": "/index.html",
       "status": 200
     }
-  ]
-}
+  ],
+  "redirects": [
+    {
+      "source": "https://www.thegreatrecoveryit.com/:path*",
+      "destination": "https://thegreatrecoveryit.com/:path*",
+      "permanent": true
+    }
