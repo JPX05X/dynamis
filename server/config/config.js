@@ -1,13 +1,43 @@
-const dotenv = require('dotenv');
-const path = require('path');
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ES Modules compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables from .env file
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-module.exports = {
+const config = {
   // Server configuration
   nodeEnv: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 3000,
+  
+  // Rate limiting configuration
+  rateLimit: {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 100, // limit each IP to 100 requests per windowMs
+    authWindowMs: 15 * 60 * 1000, // 15 minutes
+    authMaxRequests: 10, // limit auth endpoints to 10 requests per windowMs
+  },
+  
+  // Redis configuration
+  redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    ttl: 24 * 60 * 60 // 1 day in seconds
+  },
+  
+  // Session configuration
+  session: {
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day in milliseconds
+    }
+  },
   
   // Database configuration
   database: {
@@ -18,104 +48,101 @@ module.exports = {
       useUnifiedTopology: true,
       
       // Connection pool settings
-      maxPoolSize: process.env.MONGODB_POOL_SIZE ? parseInt(process.env.MONGODB_POOL_SIZE, 10) : 10,
-      minPoolSize: process.env.MONGODB_MIN_POOL_SIZE ? parseInt(process.env.MONGODB_MIN_POOL_SIZE, 10) : 5,
-      maxIdleTimeMS: 30000, // Close idle connections after 30 seconds
-      waitQueueTimeoutMS: 5000, // Wait 5 seconds before timing out when no connections are available
+      maxPoolSize: Number(process.env.MONGODB_POOL_SIZE) || 10,
+      minPoolSize: Number(process.env.MONGODB_MIN_POOL_SIZE) || 2,
+      maxIdleTimeMS: Number(process.env.MONGODB_MAX_IDLE_TIME_MS) || 30000,
+      serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
+      socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000,
       
-      // Server selection and connection settings
-      serverSelectionTimeoutMS: 30000, // Time to wait for server selection
-      connectTimeoutMS: 10000, // Time to wait for initial connection
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      // Connection timeout
+      connectTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS) || 10000,
       
-      // Write concern
-      w: 'majority',
-      wtimeout: 10000, // 10 second write concern timeout
+      // Authentication
+      authSource: process.env.MONGODB_AUTHSOURCE || undefined,
+      user: process.env.MONGODB_USER || undefined,
+      pass: process.env.MONGODB_PASSWORD || undefined,
       
       // Retry settings
       retryWrites: true,
       retryReads: true,
       
-      // Authentication (if needed)
-      auth: process.env.MONGODB_USER && process.env.MONGODB_PASSWORD ? {
-        username: process.env.MONGODB_USER,
-        password: process.env.MONGODB_PASSWORD,
-      } : undefined,
-      
-      // TLS/SSL options (for production)
-      ssl: process.env.MONGODB_SSL === 'true',
-      sslValidate: process.env.MONGODB_SSL_VALIDATE !== 'false',
-      tlsAllowInvalidCertificates: process.env.MONGODB_ALLOW_INVALID_CERTS === 'true',
-      
-      // Replica set options (if using replica sets)
-      replicaSet: process.env.MONGODB_REPLICA_SET,
-      readPreference: process.env.MONGODB_READ_PREFERENCE || 'primary',
-      
-      // Additional options
-      compressors: ['zlib', 'snappy', 'zstd'],
-      zlibCompressionLevel: 7,
+    }
+  },
+  
+  // Security
+  security: {
+    // JWT settings
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    
+    // Password hashing
+    saltRounds: 10,
+    
+    // Rate limiting
+    rateLimit: {
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100 // limit each IP to 100 requests per windowMs
+    }
+  },
+  
+  // Email configuration
+  email: {
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: process.env.EMAIL_PORT || 587,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER || '',
+      pass: process.env.EMAIL_PASSWORD || ''
     },
+    from: process.env.EMAIL_FROM || 'noreply@dynamis-llp.com'
   },
   
-  // Telegram bot configuration
-  telegram: {
-    botToken: process.env.TELEGRAM_BOT_TOKEN,
-    chatId: process.env.TELEGRAM_CHAT_ID,
+  // File uploads
+  uploads: {
+    maxFileSize: 5 * 1024 * 1024, // 5MB
+    allowedFileTypes: [
+      'image/jpeg',
+      'image/png',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ],
+    uploadDir: process.env.UPLOAD_DIR || 'uploads'
   },
   
-  // Rate limiting
-  rateLimit: {
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // Limit each IP to 100 requests per windowMs
+  // Logging
+  logging: {
+    level: process.env.LOG_LEVEL || 'info',
+    file: process.env.LOG_FILE || 'logs/combined.log',
+    errorFile: process.env.ERROR_LOG_FILE || 'logs/error.log',
+    console: process.env.LOG_CONSOLE !== 'false'
   },
   
-  // CORS configuration
+  // CORS
   cors: {
-    // List of allowed origins (add your frontend URLs here)
-    allowedOrigins: process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-      : [
-          'http://localhost:3000',
-          'http://localhost:8080',
-          'http://127.0.0.1:3000',
-          'http://127.0.0.1:8080',
-          // Add production URLs here
-        ],
-    // Allow credentials (cookies, authorization headers, etc.)
-    credentials: true,
-    // Allowed HTTP methods
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    // Allowed headers
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
-      'X-Access-Token',
-      'X-Refresh-Token'
-    ],
-    // Exposed headers
-    exposedHeaders: [
-      'Content-Length',
-      'X-Access-Token',
-      'X-Refresh-Token'
-    ],
-    // Max age of the preflight request in seconds
-    maxAge: 86400, // 24 hours
-    // Enable CORS for all routes by default
-    enableForAllRoutes: true
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
   
-  // JWT configuration (if needed for authentication)
-  jwt: {
-    secret: process.env.JWT_SECRET || 'your_jwt_secret_key',
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  // API
+  api: {
+    prefix: '/api',
+    version: 'v1',
+    docsPath: '/api-docs'
   },
   
-  // Logging configuration
-  logs: {
-    level: process.env.LOG_LEVEL || 'debug',
-    directory: path.join(__dirname, '../logs'),
-  },
+  // Session
+  session: {
+    secret: process.env.SESSION_SECRET || 'your-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+  }
 };
+
+export default config;

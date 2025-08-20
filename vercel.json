@@ -34,28 +34,27 @@
       "use": "@vercel/static"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/server.js"
+  "rewrites": [
+    { 
+      "source": "/api/(.*)", 
+      "destination": "/server.js"
     },
-    {
-      "src": "/(.*\\.(?:css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot))",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(contact|careers|media|legal|talents|knowledge|practice|results|practiceArea/.*)\\.html",
-      "dest": "/$1.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html",
-      "status": 200
+    { 
+      "source": "/(.*)", 
+      "destination": "/index.html"
     }
   ],
   "redirects": [
     {
-      "source": "https://www.thegreatrecoveryit.com/:path*",
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.thegreatrecoveryit.com"
+        }
+      ],
       "destination": "https://thegreatrecoveryit.com/:path*",
       "permanent": true
     }
+  ]
+}

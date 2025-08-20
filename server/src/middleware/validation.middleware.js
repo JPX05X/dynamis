@@ -1,6 +1,6 @@
-const { body, param, validationResult } = require('express-validator');
-const { ObjectId } = require('mongoose').Types;
-const logger = require('../utils/logger');
+import { body, param, validationResult } from 'express-validator';
+import { Types } from 'mongoose';
+import logger from '../utils/logger.js';
 
 // Common validation rules
 const commonRules = {
@@ -21,172 +21,180 @@ const commonRules = {
   email: body('email')
     .trim()
     .isEmail()
+    .withMessage('Please provide a valid email address')
     .normalizeEmail()
-    .withMessage('Please provide a valid email address'),
+    .notEmpty()
+    .withMessage('Email is required'),
     
   phone: body('phone')
+    .trim()
     .optional({ checkFalsy: true })
-    .trim()
-    .isLength({ min: 5, max: 20 })
-    .withMessage('Phone number must be between 5 and 20 characters')
-    .matches(/^[0-9+\-\s()]+$/)
+    .matches(/^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/)
     .withMessage('Please provide a valid phone number'),
-    
-  subject: body('subject')
-    .optional()
-    .trim()
-    .isLength({ min: 2, max: 200 })
-    .withMessage('Subject must be between 2 and 200 characters'),
     
   message: body('message')
     .trim()
-    .isLength({ min: 10, max: 5000 })
-    .withMessage('Message must be between 10 and 5000 characters'),
+    .isLength({ min: 10, max: 2000 })
+    .withMessage('Message must be between 10 and 2000 characters')
+    .notEmpty()
+    .withMessage('Message is required'),
     
-  status: body('status')
-    .optional()
-    .isIn(['new', 'in_progress', 'resolved', 'spam'])
-    .withMessage('Invalid status value'),
+  subject: body('subject')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Subject must be between 2 and 100 characters')
+    .notEmpty()
+    .withMessage('Subject is required'),
     
-  response: body('response')
+  // Honeypot field - should always be empty
+  honeypot: body('honeypot')
     .optional()
-    .isString()
-    .isLength({ min: 1, max: 5000 })
-    .withMessage('Response must be between 1 and 5000 characters'),
-    
-  page: param('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer')
-    .toInt(),
-    
-  limit: param('limit')
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100')
-    .toInt(),
+    .trim()
+    .isEmpty()
+    .withMessage('Form submission rejected')
 };
 
-// Validation middleware
+/**
+ * Validation middleware
+ * @param {Array} validations - Array of validation rules
+ * @returns {Function} Express middleware
+ */
 const validate = (validations) => {
   return async (req, res, next) => {
+    // Run all validations
     await Promise.all(validations.map(validation => validation.run(req)));
 
+    // Check for validation errors
     const errors = validationResult(req);
+    
     if (errors.isEmpty()) {
       return next();
     }
 
     // Log validation errors
-    logger.warn('Validation failed', { errors: errors.array() });
+    logger.warn('Validation failed', {
+      errors: errors.array(),
+      url: req.originalUrl,
+      method: req.method,
+      body: req.body,
+      params: req.params,
+      query: req.query
+    });
 
+    // Return validation errors
     return res.status(400).json({
       success: false,
-      errors: errors.array().map(err => ({
-        field: err.param,
-        message: err.msg,
-        value: err.value,
-      })),
+      errors: errors.array()
     });
   };
 };
 
-// Validate MongoDB ObjectId
+/**
+ * Validate MongoDB ObjectId
+ * @param {string} paramName - Name of the parameter to validate
+ * @returns {Function} Express middleware
+ */
 const validateObjectId = (paramName) => {
-  return [
-    param(paramName)
-      .custom((value) => {
-        if (!ObjectId.isValid(value)) {
-          throw new Error('Invalid ID format');
-        }
-        return true;
-      }),
-    validate([]),
-  ];
+  return (req, res, next) => {
+    const id = req.params[paramName];
+    
+    if (!Types.ObjectId.isValid(id)) {
+      logger.warn(`Invalid ObjectId: ${id}`);
+      return res.status(400).json({
+        success: false,
+        error: `Invalid ${paramName} format`
+      });
+    }
+    
+    next();
+  };
 };
 
 // Message validation rules
 const messageValidation = {
   createMessage: validate([
     // Honeypot validation - if this field is filled, it's likely a bot
-    body('website')
-      .optional()
-      .isEmpty()
-      .withMessage('Form submission rejected'),
-      
-    // Accept either full `name` or both `firstName` and `lastName`
-    body('name')
-      .optional({ checkFalsy: true })
-      .trim()
-      .isLength({ min: 2, max: 100 })
-      .withMessage('Name must be between 2 and 100 characters'),
-    body('firstName')
-      .optional({ checkFalsy: true })
-      .trim()
-      .isLength({ min: 2, max: 50 })
-      .withMessage('First name must be between 2 and 50 characters'),
-    body('lastName')
-      .optional({ checkFalsy: true })
-      .trim()
-      .isLength({ min: 2, max: 50 })
-      .withMessage('Last name must be between 2 and 50 characters'),
+    commonRules.honeypot,
+    
+    // Required fields
+    commonRules.firstName,
+    commonRules.lastName,
     commonRules.email,
     commonRules.phone,
     commonRules.subject,
-
-    // Accept either `message` or `content` with the same length constraints
-    body('message')
-      .optional({ checkFalsy: true })
-      .trim()
-      .isLength({ min: 10, max: 5000 })
-      .withMessage('Message must be between 10 and 5000 characters'),
-    body('content')
-      .optional({ checkFalsy: true })
-      .trim()
-      .isLength({ min: 10, max: 5000 })
-      .withMessage('Content must be between 10 and 5000 characters'),
-
-    // Require at least one of message or content
-    body()
-      .custom((_, { req }) => {
-        const msg = (req.body.message || '').trim();
-        const cnt = (req.body.content || '').trim();
-        if (!msg && !cnt) {
-          throw new Error('Either message or content is required');
-        }
-        return true;
-      }),
-
-    // Require either full name or both first and last names
-    body()
-      .custom((_, { req }) => {
-        const hasFullName = !!(req.body.name && String(req.body.name).trim().length >= 2);
-        const hasFirst = !!(req.body.firstName && String(req.body.firstName).trim().length >= 2);
-        const hasLast = !!(req.body.lastName && String(req.body.lastName).trim().length >= 2);
-        if (!(hasFullName || (hasFirst && hasLast))) {
-          throw new Error('Provide either name or both firstName and lastName');
-        }
-        return true;
-      }),
+    commonRules.message,
+    
+    // Additional message-specific validations
+    body('privacyPolicyAccepted')
+      .isBoolean()
+      .withMessage('You must accept the privacy policy')
+      .toBoolean()
+      .isBoolean()
+      .withMessage('Invalid privacy policy acceptance value')
+      .custom((value) => value === true)
+      .withMessage('You must accept the privacy policy'),
+      
+    body('marketingConsent')
+      .optional()
+      .isBoolean()
+      .withMessage('Invalid marketing consent value')
+      .toBoolean()
   ]),
   
-  updateStatus: validate([
-    commonRules.status,
+  updateMessage: validate([
+    body('status')
+      .optional()
+      .isIn(['new', 'in_progress', 'resolved', 'spam'])
+      .withMessage('Invalid status value'),
+      
+    body('priority')
+      .optional()
+      .isIn(['low', 'medium', 'high', 'urgent'])
+      .withMessage('Invalid priority value'),
+      
+    body('assignedTo')
+      .optional()
+      .isMongoId()
+      .withMessage('Invalid user ID'),
+      
+    body('tags')
+      .optional()
+      .isArray()
+      .withMessage('Tags must be an array'),
+      
+    body('tags.*')
+      .isString()
+      .withMessage('Each tag must be a string')
+      .trim()
+      .isLength({ min: 1, max: 50 })
+      .withMessage('Each tag must be between 1 and 50 characters')
   ]),
   
   addResponse: validate([
-    commonRules.response,
-  ]),
-  
-  listMessages: validate([
-    commonRules.page,
-    commonRules.limit,
-  ]),
+    body('content')
+      .trim()
+      .isLength({ min: 1, max: 5000 })
+      .withMessage('Response must be between 1 and 5000 characters')
+      .notEmpty()
+      .withMessage('Response content is required'),
+      
+    body('isInternalNote')
+      .optional()
+      .isBoolean()
+      .withMessage('isInternalNote must be a boolean value')
+  ])
 };
 
-module.exports = {
+export {
   validate,
   validateObjectId,
-  messageValidation,
   commonRules,
+  messageValidation
+};
+
+export default {
+  validate,
+  validateObjectId,
+  commonRules,
+  messageValidation
 };

@@ -1,14 +1,16 @@
-const winston = require('winston');
-const path = require('path');
-const fs = require('fs');
-const config = require('../../config/config');
-const { createLogger, format, transports } = winston;
-const { combine, timestamp, printf, colorize, json, errors } = format;
+import winston from 'winston';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// ES Modules compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Ensure logs directory exists
-const logDir = 'logs';
+const logDir = path.join(__dirname, '../../logs');
 if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
+  fs.mkdirSync(logDir, { recursive: true });
 }
 
 // Custom log levels
@@ -27,125 +29,112 @@ const logLevels = {
     warn: 'yellow',
     info: 'green',
     http: 'magenta',
-    debug: 'white',
+    debug: 'blue',
     cors: 'cyan',
-    ratelimit: 'orange',
-  }
+    ratelimit: 'grey',
+  },
 };
 
 // Add colors to winston
 winston.addColors(logLevels.colors);
 
-// Custom format for console output
-const consoleFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
-  let log = `${timestamp} [${level}]: ${message}`;
-  
-  // Add stack trace if available
-  if (stack) {
-    log += `\n${stack}`;
-  }
-  
-  // Add metadata if present
-  if (Object.keys(meta).length > 0) {
-    log += `\n${JSON.stringify(meta, null, 2)}`;
-  }
-  
-  return log;
-});
-
-// Base format for all logs
-const baseFormat = combine(
-  timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  errors({ stack: true }),
-  json()
+// Format for console logging
+const consoleFormat = winston.format.combine(
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.colorize({ all: true }),
+  winston.format.printf(
+    (info) =>
+      `${info.timestamp} ${info.level}: ${info.message} ${
+        info.stack ? `\n${info.stack}` : ''
+      }`
+  )
 );
 
-// Console transport format
-const consoleTransportFormat = combine(
-  colorize({ all: true }),
-  timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  consoleFormat
+// Format for file logging
+const fileFormat = winston.format.combine(
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.errors({ stack: true }),
+  winston.format.json()
 );
 
-// Create transports
-const loggerTransports = [
-  // Console transport for all levels in development, only errors in production
-  new transports.Console({
-    format: consoleTransportFormat,
-    level: process.env.NODE_ENV === 'development' ? 'debug' : 'info'
-  }),
-  
-  // Error logs
-  new transports.File({
-    filename: `${logDir}/error.log`,
-    level: 'error',
-    maxsize: 10485760, // 10MB
-    maxFiles: 7, // Keep 7 days of logs
-  }),
-  
-  // CORS specific logs
-  new transports.File({
-    filename: `${logDir}/cors.log`,
-    level: 'cors',
-    format: baseFormat,
-    maxsize: 10485760,
-    maxFiles: 7,
-  }),
-  
-  // Rate limiting specific logs
-  new transports.File({
-    filename: `${logDir}/ratelimit.log`,
-    level: 'ratelimit',
-    format: baseFormat,
-    maxsize: 10485760,
-    maxFiles: 7,
-  }),
-  
-  // Combined logs (all levels)
-  new transports.File({
-    filename: `${logDir}/combined.log`,
-    format: baseFormat,
-    maxsize: 10485760,
-    maxFiles: 7,
-  })
-];
-
-// Create the logger instance
-const logger = createLogger({
+// Create the logger
+const logger = winston.createLogger({
   levels: logLevels.levels,
-  level: 'debug',
-  format: baseFormat,
-  transports: loggerTransports,
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  format: fileFormat,
+  defaultMeta: { service: 'dynamis-api' },
+  transports: [
+    // Write all logs with level 'error' and below to 'error.log'
+    new winston.transports.File({
+      filename: path.join(logDir, 'error.log'),
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    // Write all logs with level 'info' and below to 'combined.log'
+    new winston.transports.File({
+      filename: path.join(logDir, 'combined.log'),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+  ],
+  exceptionHandlers: [
+    new winston.transports.File({
+      filename: path.join(logDir, 'exceptions.log'),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+  ],
+  rejectionHandlers: [
+    new winston.transports.File({
+      filename: path.join(logDir, 'rejections.log'),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+  ],
   exitOnError: false, // Don't exit on handled exceptions
 });
 
-// Add a stream for morgan HTTP request logging
+// If we're not in production, log to the console as well
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(
+    new winston.transports.Console({
+      format: consoleFormat,
+    })
+  );
+}
+
+// Create a stream object with a 'write' function that will be used by morgan
 logger.stream = {
-  write: (message) => {
+  write: function (message) {
     logger.http(message.trim());
   },
 };
 
 // Custom logger methods for CORS and rate limiting
-logger.cors = (message, meta = {}) => {
-  logger.log('cors', message, meta);
+logger.cors = function (message, meta = {}) {
+  this.log('cors', message, meta);
 };
 
-logger.ratelimit = (message, meta = {}) => {
-  logger.log('ratelimit', message, meta);
+logger.ratelimit = function (message, meta = {}) {
+  this.log('ratelimit', message, meta);
 };
 
 // Handle uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
   // Don't exit in development to allow for debugging
-  if (process.env.NODE_ENV !== 'development') {
+  if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', { promise, reason });
+  // Don't exit in development to allow for debugging
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });
 
-module.exports = logger;
+export default logger;

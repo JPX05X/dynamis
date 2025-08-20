@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import healthController from '../controllers/health.controller.js';
+
 const router = express.Router();
-const healthController = require('../controllers/health.controller');
 
 /**
  * @swagger
@@ -26,45 +27,17 @@ const healthController = require('../controllers/health.controller');
  *               properties:
  *                 status:
  *                   type: string
- *                   example: "up"
- *                 message:
- *                   type: string
- *                   example: "Service is healthy"
+ *                   example: "ok"
  *                 timestamp:
  *                   type: string
  *                   format: date-time
+ *                   example: "2023-05-15T12:00:00.000Z"
  *                 uptime:
  *                   type: number
+ *                   description: Uptime in seconds
  *                   example: 123.45
- *                 database:
- *                   type: object
- *                   properties:
- *                     status:
- *                       type: string
- *                       example: "up"
- *                     connectionState:
- *                       type: number
- *                       example: 1
- *                     stats:
- *                       type: object
- *                       properties:
- *                         connections:
- *                           type: number
- *                           example: 5
- *                         disconnects:
- *                           type: number
- *                           example: 1
- *                         queries:
- *                           type: number
- *                           example: 42
- *                         slowQueries:
- *                           type: number
- *                           example: 2
- *                         errors:
- *                           type: number
- *                           example: 0
  *       503:
- *         description: Service is unhealthy
+ *         description: Service unavailable
  *         content:
  *           application/json:
  *             schema:
@@ -72,23 +45,57 @@ const healthController = require('../controllers/health.controller');
  *               properties:
  *                 status:
  *                   type: string
- *                   example: "down"
- *                 message:
+ *                   example: "error"
+ *                 error:
  *                   type: string
  *                   example: "Database connection failed"
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2023-05-15T12:00:00.000Z"
  */
-router.get('/', healthController.getHealth);
+router.get('/', healthController.checkHealth);
 
 /**
  * @swagger
- * /health/stats:
+ * /health/version:
  *   get:
- *     summary: Get database statistics
- *     description: Returns statistics about the database connection and queries
+ *     summary: Get application version
+ *     description: Returns the current version of the application
  *     tags: [Health]
  *     responses:
  *       200:
- *         description: Database statistics
+ *         description: Version information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 name:
+ *                   type: string
+ *                   example: "dynamis-messaging-service"
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ *                 environment:
+ *                   type: string
+ *                   example: "development"
+ *                 nodeVersion:
+ *                   type: string
+ *                   example: "v14.17.0"
+ */
+router.get('/version', healthController.getVersion);
+
+/**
+ * @swagger
+ * /health/status:
+ *   get:
+ *     summary: Get detailed system status
+ *     description: Returns detailed status information about the application and its dependencies
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Detailed system status
  *         content:
  *           application/json:
  *             schema:
@@ -96,35 +103,33 @@ router.get('/', healthController.getHealth);
  *               properties:
  *                 status:
  *                   type: string
- *                   example: "success"
- *                 data:
+ *                   example: "ok"
+ *                 services:
  *                   type: object
  *                   properties:
- *                     connections:
- *                       type: number
- *                       example: 5
- *                     disconnects:
- *                       type: number
- *                       example: 1
- *                     errors:
- *                       type: number
- *                       example: 0
- *                     queries:
- *                       type: number
- *                       example: 42
- *                     slowQueries:
- *                       type: number
- *                       example: 2
- *                     isConnected:
- *                       type: boolean
- *                       example: true
- *                     connectionState:
- *                       type: number
- *                       example: 1
- *                     connectionRetries:
- *                       type: number
- *                       example: 0
+ *                     database:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                           example: "connected"
+ *                         responseTime:
+ *                           type: number
+ *                           example: 12.34
+ *                     cache:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                           example: "connected"
+ *                         responseTime:
+ *                           type: number
+ *                           example: 1.23
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2023-05-15T12:00:00.000Z"
  */
-router.get('/stats', healthController.getDatabaseStats);
+router.get('/status', healthController.getStatus);
 
-module.exports = router;
+export default router;

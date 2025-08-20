@@ -38,7 +38,7 @@
           website: formData.get('website') || '' // Honeypot field
         };
         
-        const response = await fetch('/api/messages', {
+        const response = await fetch(`${window.API_CONFIG?.BASE_URL || '/api'}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

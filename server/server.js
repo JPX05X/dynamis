@@ -5,14 +5,14 @@
  * Sets up the Express application and starts the server
  */
 
-require('dotenv').config();
-const http = require('http');
-const app = require('./src/app');
-const config = require('./config/config');
-const logger = require('./src/utils/logger');
+import 'dotenv/config';
+import http from 'http';
+import app from './src/app.js';
+import config from './config/config.js';
+import logger from './src/utils/logger.js';
 
 // Get port from environment and store in Express
-const port = normalizePort(process.env.PORT || config.port || 3000);
+const port = normalizePort(process.env.PORT || config.port);
 app.set('port', port);
 
 // Create HTTP server
@@ -20,7 +20,11 @@ const server = http.createServer(app);
 
 // Listen on provided port, on all network interfaces
 server.listen(port);
+
+// Event listener for HTTP server "error" event
 server.on('error', onError);
+
+// Event listener for HTTP server "listening" event
 server.on('listening', onListening);
 
 /**
@@ -50,16 +54,18 @@ function onError(error) {
     throw error;
   }
 
-  const bind = typeof port === 'string' ? `Pipe ${port}` : `Port ${port}`;
+  const bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
 
   // Handle specific listen errors with friendly messages
   switch (error.code) {
     case 'EACCES':
-      logger.error(`${bind} requires elevated privileges`);
+      logger.error(bind + ' requires elevated privileges');
       process.exit(1);
       break;
     case 'EADDRINUSE':
-      logger.error(`${bind} is already in use`);
+      logger.error(bind + ' is already in use');
       process.exit(1);
       break;
     default:
@@ -72,17 +78,11 @@ function onError(error) {
  */
 function onListening() {
   const addr = server.address();
-  const bind = typeof addr === 'string' ? `pipe ${addr}` : `port ${addr.port}`;
-  
-  logger.info(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
-  logger.info(`Server listening on ${bind}`);
-  
-  // Log the environment
-  logger.debug('Environment variables:', {
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    MONGODB_URI: process.env.MONGODB_URI ? '***' : 'Not set',
-  });
+  const bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  logger.info(`Server is running in ${config.nodeEnv} mode on ${bind}`);
+  logger.info(`API Documentation available at http://localhost:${addr.port}${config.api.docsPath}`);
 }
 
 // Handle uncaught exceptions
@@ -103,15 +103,22 @@ process.on('unhandledRejection', (reason, promise) => {
   });
 });
 
-// Handle termination signals
-['SIGTERM', 'SIGINT'].forEach((signal) => {
-  process.on(signal, () => {
-    logger.info(`${signal} received. Shutting down gracefully...`);
-    server.close(() => {
-      logger.info('Server closed');
-      process.exit(0);
-    });
+// Handle process termination
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
   });
 });
 
-module.exports = server;
+// Handle Ctrl+C
+process.on('SIGINT', () => {
+  logger.info('SIGINT received. Shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
+  });
+});
+
+export default server;

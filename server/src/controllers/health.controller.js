@@ -1,65 +1,104 @@
-const { checkHealth, getStats } = require('../utils/db');
-const logger = require('../utils/logger');
+import { checkHealth as checkDbHealth, getStats as getDbStats } from '../utils/db.js';
+import logger from '../utils/logger.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
- * Get database health status
- * @route GET /health
- * @returns {Object} Health status and database statistics
+ * Check system health
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
-const getHealth = async (req, res, next) => {
+const checkHealth = async (req, res) => {
   try {
-    const health = await checkHealth();
-    const status = health.status === 'up' ? 200 : 503;
+    const health = await checkDbHealth();
+    const status = health.status === 'connected' ? 200 : 503;
     
-    res.status(status).json({
+    return res.status(status).json({
       status: health.status,
-      message: health.message,
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       database: {
         status: health.status,
-        connectionState: health.stats?.connectionState,
-        stats: {
-          connections: health.stats?.connections,
-          disconnects: health.stats?.disconnects,
-          queries: health.stats?.queries,
-          slowQueries: health.stats?.slowQueries,
-          errors: health.stats?.errors
-        },
-        dbStats: health.stats?.dbStats
+        message: health.message,
+        stats: health.stats,
       },
-      system: {
-        nodeVersion: process.version,
-        platform: process.platform,
-        memoryUsage: process.memoryUsage(),
-        cpuUsage: process.cpuUsage()
-      }
     });
   } catch (error) {
-    logger.error('Health check failed:', error);
-    next(error);
+    logger.error('Health check failed', { error: error.message });
+    return res.status(503).json({
+      status: 'error',
+      error: 'Service Unavailable',
+      message: 'Failed to check system health',
+      timestamp: new Date().toISOString(),
+    });
   }
 };
 
 /**
- * Get database statistics
- * @route GET /health/stats
- * @returns {Object} Database statistics
+ * Get application version information
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
-const getDatabaseStats = async (req, res, next) => {
+const getVersion = async (req, res) => {
   try {
-    const stats = getStats();
-    res.json({
-      status: 'success',
-      data: stats
+    const pkg = JSON.parse(
+      await fs.readFile(new URL('../../package.json', import.meta.url), 'utf-8')
+    );
+    
+    return res.json({
+      name: pkg.name,
+      version: pkg.version,
+      environment: process.env.NODE_ENV || 'development',
+      nodeVersion: process.version,
     });
   } catch (error) {
-    logger.error('Failed to get database stats:', error);
-    next(error);
+    logger.error('Failed to get version info', { error: error.message });
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve version information',
+    });
   }
 };
 
-module.exports = {
-  getHealth,
-  getDatabaseStats
+/**
+ * Get detailed system status
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getStatus = async (req, res) => {
+  try {
+    const [dbHealth, dbStats] = await Promise.all([
+      checkDbHealth(),
+      getDbStats(),
+    ]);
+    
+    // Check if all services are healthy
+    const allServicesHealthy = dbHealth.status === 'connected';
+    
+    return res.status(allServicesHealthy ? 200 : 503).json({
+      status: allServicesHealthy ? 'ok' : 'degraded',
+      services: {
+        database: {
+          status: dbHealth.status,
+          message: dbHealth.message,
+          stats: dbStats,
+        },
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Status check failed', { error: error.message });
+    return res.status(503).json({
+      status: 'error',
+      error: 'Service Unavailable',
+      message: 'Failed to check system status',
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+export default {
+  checkHealth,
+  getVersion,
+  getStatus,
 };

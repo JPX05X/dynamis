@@ -1,124 +1,154 @@
-const express = require('express');
-const helmet = require('helmet');
-const cors = require('cors');
-const morgan = require('morgan');
-const path = require('path');
-const config = require('../config/config');
-const logger = require('./utils/logger');
-const connectDB = require('./utils/db');
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import morgan from 'morgan';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import config from '../config/config.js';
+import logger from './utils/logger.js';
+import session from './config/session.config.js';
+import { csrfTokenMiddleware, csrfProtection } from './middleware/security.middleware.js';
+
+// ES Modules compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import routes
-const messageRoutes = require('./routes/message.routes');
-const healthRoutes = require('./routes/health.routes');
+import messageRoutes from './routes/message.routes.js';
+import healthRoutes from './routes/health.routes.js';
+import csrfRoutes from './routes/csrf.routes.js';
 
-// Import rate limiters
-const { apiLimiter, authLimiter, messageLimiter } = require('./middleware/rateLimiter');
+// Rate limiting is handled at the route level
 
 // Initialize Express app
 const app = express();
 
-// Connect to MongoDB
-connectDB();
+// Database connection is initialized by the bootstrap (server.js)
 
 // Trust proxy (important if behind a reverse proxy like Nginx)
 app.set('trust proxy', 1);
 
+// Session middleware (must come before CSRF)
+app.use(session);
+
+// CSRF token middleware (must come after session middleware)
+app.use(csrfTokenMiddleware);
+
+// Apply CSRF protection to all non-GET routes except /api/csrf-token
+app.use((req, res, next) => {
+  // Skip CSRF for CSRF token endpoint and GET/HEAD/OPTIONS requests
+  if (req.path === '/api/csrf-token' || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  csrfProtection(req, res, next);
+});
+
 // Security middleware
 app.use(helmet());
 
-// CORS configuration and middleware
-const corsOptions = require('./config/cors.config');
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight requests for all routes
-
-// Log CORS errors
-app.use((err, req, res, next) => {
-  if (err) {
-    logger.error(`CORS Error: ${err.message}`, {
-      path: req.path,
-      method: req.method,
-      origin: req.headers.origin,
-      ip: req.ip,
-      headers: req.headers,
-    });
+// Enable CORS for all routes
+const corsOptions = {
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
     
-    if (err.status === 403) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not allowed by CORS',
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined
-      });
+    // Parse allowed origins from environment variable or use defaults
+    let allowedOrigins = [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:8000',
+      'http://127.0.0.1:8000'
+    ];
+    
+    // Add any additional origins from environment variable
+    if (process.env.ALLOWED_ORIGINS) {
+      allowedOrigins = [
+        ...allowedOrigins,
+        ...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      ];
     }
-  }
-  next(err);
-});
+    
+    // Check if the origin is in the allowed origins
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-CSRF-Token', 
+    'X-Requested-With',
+    'X-XSRF-TOKEN',
+    'XSRF-TOKEN',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Methods'
+  ],
+  exposedHeaders: [
+    'Content-Length', 
+    'X-CSRF-Token',
+    'X-XSRF-TOKEN',
+    'XSRF-TOKEN'
+  ],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
 
-// Body parser middleware
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+// Apply CORS to all routes
+app.use(cors(corsOptions));
+
+// Handle preflight requests for all routes
+app.options('*', cors(corsOptions));
 
 // Request logging
-app.use(morgan('combined', { 
-  stream: { 
-    write: (message) => logger.http(message.trim()) 
-  } 
-}));
-
-// Log all requests for debugging
-app.use((req, res, next) => {
-  logger.info(`Request: ${req.method} ${req.originalUrl}`, {
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
-    referrer: req.get('referrer'),
-  });
-  next();
-});
-
-// Apply rate limiting
-app.use(apiLimiter); // Apply to all routes
-
-// Apply more restrictive rate limiting to auth routes
-app.use('/api/auth', authLimiter);
-
-// Health check routes (no rate limiting)
-app.use('/health', healthRoutes);
-
-// Apply rate limiting to message routes
-app.use('/api/messages', messageLimiter, messageRoutes);
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-  });
-});
-
-
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  // Set static folder
-  app.use(express.static(path.join(__dirname, '../../dist')));
-  
-  // Handle SPA (Single Page Application) routing
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../../dist', 'index.html'));
-  });
+if (config.nodeEnv !== 'test') {
+  app.use(morgan('combined', {
+    stream: {
+      write: (message) => logger.http(message.trim())
+    }
+  }));
 }
 
+// Body parser middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Static files
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Rate limiting is applied at the route level for better control
+
+// API routes
+app.use(`${config.api.prefix}/health`, healthRoutes);
+app.use(`${config.api.prefix}/messages`, messageRoutes);
+app.use(`${config.api.prefix}`, csrfRoutes);
+
+// Serve API documentation
+app.use(`${config.api.docsPath}`, express.static(path.join(__dirname, '../docs')));
+
 // 404 handler
-app.use((req, res) => {
+app.use((req, res, next) => {
   res.status(404).json({
     success: false,
-    message: 'Resource not found',
-  });
-});
+    message: `Cannot ${req.method} ${req.path}`
+  });});
 
-// Global error handler
+// Error handling middleware
 app.use((err, req, res, next) => {
-  logger.error(`Global error handler: ${err.stack}`);
-  
+  logger.error(`Error: ${err.message}`, {
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    params: req.params,
+    query: req.query
+  });
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
   
@@ -129,4 +159,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-module.exports = app;
+export default app;
