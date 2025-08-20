@@ -204,12 +204,21 @@
             flex-wrap: wrap;
             justify-content: space-between;
             gap: 2rem;
+            align-items: flex-start;
         }
         
         .footer-section {
             flex: 1;
             min-width: 200px;
             margin-bottom: 1.5rem;
+        }
+        
+        /* Ensure 3 columns on desktop so Contact Us sits beside Quick Links */
+        @media (min-width: 1024px) {
+            .footer-section {
+                flex: 0 0 calc(33.333% - 2rem);
+                min-width: 0; /* allow tighter fit to avoid wrapping */
+            }
         }
         
         @media (max-width: 768px) {
@@ -232,7 +241,7 @@
                         <li><a href="practice.html">Practice Areas</a></li>
                         <li><a href="knowledge.html">Knowledge</a></li>
                         <li><a href="careers.html">Careers</a></li>
-                        <li><a href="contact.htmlcontact.html
+                        <li><a href="contact.html">Contact</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">
