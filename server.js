@@ -152,10 +152,34 @@ const allowedOrigins = isProduction
       'http://127.0.0.1:8080'
     ];
 
+// Helper to decide if an origin is allowed
+function isOriginAllowed(origin) {
+  try {
+    if (!origin) return true; // non-browser or same-origin without Origin header
+
+    // Always allow explicit allowlist
+    if (allowedOrigins.includes(origin)) return true;
+
+    const u = new URL(origin);
+
+    // Allow any vercel.app host (preview/prod URLs rotate)
+    if (u.hostname.endsWith('.vercel.app')) return true;
+
+    // Allow same-origin requests (host header may differ by protocol); rely on self
+    // If running on Vercel, VERCEL_URL provides the host
+    const vercelHost = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
+    if (vercelHost && origin === vercelHost) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // CORS middleware
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -179,7 +203,7 @@ app.use(cors({
 // Preflight handling for all routes
 app.options('*', cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));

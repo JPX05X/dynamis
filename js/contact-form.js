@@ -15,11 +15,39 @@
     
     console.log('Dynamis contact form initialized');
     
+    // Fetch CSRF token
+    async function fetchCsrfToken() {
+      try {
+        const response = await fetch(`${window.API_CONFIG?.BASE_URL || '/api'}/csrf-token`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.token) {
+          throw new Error('No CSRF token received');
+        }
+
+        return data.token;
+      } catch (error) {
+        console.error('Error fetching CSRF token:', error);
+        throw error;
+      }
+    }
+
     // Add form submission handler
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
       
-        // Show loading state
+      // Show loading state
       const submitButton = form.querySelector('button[type="submit"]');
       const originalButtonText = submitButton.textContent;
       submitButton.disabled = true;
@@ -38,11 +66,16 @@
           website: formData.get('website') || '' // Honeypot field
         };
         
+        // Get CSRF token first
+        const csrfToken = await fetchCsrfToken();
+        
         const response = await fetch(`${window.API_CONFIG?.BASE_URL || '/api'}/messages`, {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-Token': csrfToken
           },
           body: JSON.stringify(data)
         });
