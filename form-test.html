@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Test</title>
+    <style>
+        #form-status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        #form-status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        #form-status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+        }
+        
+        button[type="submit"] {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button[type="submit"]:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1>Test Form</h1>
+        <p>This is a test form to verify form submission behavior.</p>
+        
+        <form id="testForm">
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" class="form-control" rows="4" required></textarea>
+            </div>
+            
+            <button type="submit">Send Message</button>
+        </form>
+        
+        <div id="form-status"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('testForm');
+            const statusContainer = document.getElementById('form-status');
+            let submissionInProgress = false;
+            
+            // Form submission handler
+            form.addEventListener('submit', async function(e) {
+                console.log('Form submission started');
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                if (submissionInProgress) {
+                    console.log('Form submission already in progress');
+                    return false;
+                }
+                
+                submissionInProgress = true;
+                const submitButton = form.querySelector('button[type="submit"]');
+                const originalButtonText = submitButton ? submitButton.innerHTML : 'Submit';
+                
+                try {
+                    // Set loading state
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.innerHTML = 'Sending...';
+                    }
+                    
+                    // Simulate API call
+                    console.log('Simulating form submission...');
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    // Simulate successful response
+                    const success = Math.random() > 0.5;
+                    
+                    if (success) {
+                        console.log('Form submitted successfully');
+                        showStatus('Form submitted successfully!', 'success');
+                        form.reset();
+                    } else {
+                        console.log('Form submission failed');
+                        throw new Error('Failed to submit form. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Form submission error:', error);
+                    showStatus(error.message || 'An error occurred. Please try again.', 'error');
+                } finally {
+                    // Reset submission state
+                    submissionInProgress = false;
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = originalButtonText;
+                    }
+                }
+                
+                return false;
+            });
+            
+            function showStatus(message, type) {
+                console.log(`Status (${type}):`, message);
+                statusContainer.textContent = message;
+                statusContainer.className = `form-status ${type}`;
+                statusContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    </script>
+</body>
+</html>
