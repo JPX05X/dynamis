@@ -6,7 +6,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "*.html",
+      "src": "*.{js,html,css}",
       "use": "@vercel/static"
     },
     {
@@ -15,6 +15,10 @@
     },
     {
       "src": "css/*",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.{svg,ico,png,webmanifest}",
       "use": "@vercel/static"
     },
     {
@@ -38,10 +42,16 @@
     { 
       "source": "/api/(.*)", 
       "destination": "/server.js"
-    },
-    { 
-      "source": "/(.*)", 
-      "destination": "/index.html"
+    }
+  ],
+  "routes": [
+    { "src": "/favicon.ico", "dest": "/favicon.ico" },
+    { "src": "/favicon.svg", "dest": "/favicon.svg" },
+    { "src": "/apple-touch-icon.png", "dest": "/apple-touch-icon.png" },
+    { "src": "/site.webmanifest", "dest": "/site.webmanifest" },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ],
   "redirects": [
