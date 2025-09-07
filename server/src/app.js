@@ -120,13 +120,23 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files
 app.use(express.static(path.join(__dirname, '../public')));
+// Serve root-level static files (favicon, etc.)
+app.use(express.static(path.join(__dirname, '../')));
 
 // Rate limiting is applied at the route level for better control
 
-// API routes
+// API routes with versioned prefix
 app.use(`${config.api.prefix}/health`, healthRoutes);
 app.use(`${config.api.prefix}/messages`, messageRoutes);
 app.use(`${config.api.prefix}`, csrfRoutes);
+
+// Backward compatibility for non-versioned API routes
+if (config.api.oldPrefix && config.api.oldPrefix !== config.api.prefix) {
+  console.log(`Enabling backward compatibility for API prefix: ${config.api.oldPrefix}`);
+  app.use(`${config.api.oldPrefix}/health`, healthRoutes);
+  app.use(`${config.api.oldPrefix}/messages`, messageRoutes);
+  app.use(`${config.api.oldPrefix}`, csrfRoutes);
+}
 
 // Serve API documentation
 app.use(`${config.api.docsPath}`, express.static(path.join(__dirname, '../docs')));
